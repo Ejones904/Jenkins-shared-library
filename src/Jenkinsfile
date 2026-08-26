@@ -26,9 +26,9 @@ pipeline {
         stage("build and push image") {
             steps {
                 script {
-                buildImage 'ejones904/demo-app:jma-3.0'
+                buildImage "ejones904/demo-app:${IMAGE_NAME}"
                 dockerLogin()
-                dockerPush 'ejones904/demo-app:jma-3.0'
+                dockerPush "ejones904/demo-app:${IMAGE_NAME}"
                 }
             }
         }
