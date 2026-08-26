@@ -26,9 +26,11 @@ pipeline {
         stage("build and push image") {
             steps {
                 script {
-                buildImage "ejones904/demo-app:${IMAGE_NAME}"
+                def imageTag = "jma-${env.BUILD_NUMBER}"
+
+                buildImage "ejones904/demo-app:${imageTag}"
                 dockerLogin()
-                dockerPush "ejones904/demo-app:${IMAGE_NAME}"
+                dockerPush "ejones904/demo-app:${imageTag}"
                 }
             }
         }
