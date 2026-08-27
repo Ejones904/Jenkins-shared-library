@@ -1,4 +1,4 @@
-# Jenkins Shared Library CI/CD Pipeline
+# Jenkins Shared Library CI/CD Pipeline with Automatic GitHub Webhooks
 
 ## Project Overview
 
@@ -6,29 +6,56 @@ This project started as an exercise in creating a Jenkins Shared Library.
 
 It turned into a much deeper lesson in how CI/CD systems actually work.
 
-The goal was to take pipeline functionality that would normally live directly inside a Jenkinsfile and move it into reusable Groovy functions that Jenkins pipelines can call when needed.
+The original goal was to take pipeline functionality that would normally live directly inside a Jenkinsfile and move it into reusable Groovy functions that Jenkins pipelines could call when needed.
 
-The final solution integrates GitHub, Jenkins, Jenkins Shared Libraries, Groovy, Maven, Java/Spring Boot, Docker, Docker Hub, Jenkins Credentials, and Linux permissions into a working CI/CD workflow.
+After successfully building the Shared Library pipeline, I extended the project by integrating a **GitHub webhook**, allowing source-code changes to automatically trigger Jenkins instead of requiring me to manually select **Build Now**.
 
-After a lot of troubleshooting — and 25 Jenkins builds — the pipeline successfully:
+The final solution integrates:
 
-- Retrieves the project from GitHub
-- Loads a Jenkins Shared Library
-- Executes reusable Groovy pipeline functions
-- Builds and packages a Java application with Maven
-- Creates a JAR artifact
-- Builds a Docker image
-- Generates a Docker image tag using the Jenkins build number
-- Authenticates to Docker Hub using Jenkins-managed credentials
-- Pushes the versioned image to Docker Hub
+- GitHub
+- GitHub Webhooks
+- Jenkins
+- Jenkins Shared Libraries
+- Groovy
+- Maven 3.9
+- Java / Spring Boot
+- Docker
+- Docker Hub
+- Jenkins Credentials
+- Linux permissions
+- Event-driven CI/CD automation
 
-The final successful execution was:
+After extensive troubleshooting and 25 Jenkins builds, the underlying Shared Library pipeline successfully built the application, created a Docker image, and published the versioned image to Docker Hub.
+
+The webhook integration then changed the workflow from:
 
 ```text
-Build #25 — SUCCESS
+Code Change
+    ↓
+Git Push
+    ↓
+Manually Start Jenkins
+    ↓
+Pipeline Runs
 ```
 
-This project reinforced something important for me: getting a pipeline to work is only part of CI/CD engineering. Understanding why it fails, isolating each layer, and following the error messages until the actual root cause is found is just as important.
+to:
+
+```text
+Code Change
+    ↓
+Git Push
+    ↓
+GitHub Webhook
+    ↓
+Jenkins Automatically Triggered
+    ↓
+CI/CD Pipeline Runs
+```
+
+This project reinforced something important for me: getting a pipeline to work is only part of CI/CD engineering.
+
+Understanding why it fails, isolating each layer, and following the errors until the actual root cause is found is just as important.
 
 ---
 
@@ -60,101 +87,104 @@ dockerPush()
 
 The implementation behind those functions can then be maintained centrally.
 
-This creates a foundation for more standardized and reusable CI/CD automation.
+There was also another manual step in the original workflow:
+
+```text
+Developer pushes code
+        ↓
+Developer opens Jenkins
+        ↓
+Developer clicks Build Now
+```
+
+By integrating GitHub Webhooks, the pipeline can now respond automatically to source-code changes.
+
+Together, Shared Libraries and webhook automation provide a foundation for more standardized, reusable, and event-driven CI/CD automation.
 
 ---
 
-# Architecture
+# Final Architecture
 
 ```text
-┌──────────────────────┐
-│      Developer       │
-└──────────┬───────────┘
-           │
-           │ git push
-           ▼
-┌──────────────────────┐
-│        GitHub        │
-│ Jenkins Shared       │
-│ Library Repository   │
-└──────────┬───────────┘
-           │
-           │ SCM Checkout
-           ▼
-┌──────────────────────┐
-│       Jenkins        │
-│       Pipeline       │
-└──────────┬───────────┘
-           │
-           ├──────────────► Jenkins Shared Library
-           │                  │
-           │                  ├── buildJar()
-           │                  ├── buildImage()
-           │                  ├── dockerLogin()
-           │                  └── dockerPush()
-           │
-           ▼
-┌──────────────────────┐
-│      Maven 3.9       │
-│     mvn package      │
-└──────────┬───────────┘
-           │
-           ▼
-┌──────────────────────┐
-│       Java JAR       │
-│       target/        │
-└──────────┬───────────┘
-           │
-           ▼
-┌──────────────────────┐
-│        Docker        │
-│     Build Image      │
-└──────────┬───────────┘
-           │
-           │ Jenkins Credentials
-           ▼
-┌──────────────────────┐
-│      Docker Hub      │
-│   ejones904/demo-app │
-│       jma-N          │
-└──────────────────────┘
+┌───────────────────────┐
+│       Developer       │
+│    Modify / Commit    │
+└───────────┬───────────┘
+            │
+            │ git push
+            ▼
+┌───────────────────────┐
+│        GitHub         │
+│      Repository       │
+└───────────┬───────────┘
+            │
+            │ Push Event
+            │ GitHub Webhook
+            ▼
+┌───────────────────────┐
+│        Jenkins        │
+│      CI/CD Job        │
+└───────────┬───────────┘
+            │
+            ├── SCM Checkout
+            │
+            ├── Load Shared Library
+            │
+            ├── Maven Package
+            │
+            ├── Docker Build
+            │
+            ├── Docker Login
+            │
+            └── Docker Push
+            │
+            ▼
+┌───────────────────────┐
+│      Docker Hub       │
+│   ejones904/demo-app  │
+│    jma-<BUILD_NUM>    │
+└───────────────────────┘
 ```
 
 ---
 
 # CI/CD Workflow
 
-The final working pipeline follows this sequence:
+The completed workflow follows this sequence:
 
 ```text
-Developer Changes
-       ↓
+Developer Changes Code
+        ↓
 Git Commit
-       ↓
-Push to GitHub
-       ↓
-Jenkins SCM Checkout
-       ↓
+        ↓
+Git Push
+        ↓
+GitHub Detects Push
+        ↓
+GitHub Webhook
+        ↓
+Jenkins Automatically Triggered
+        ↓
+SCM Checkout
+        ↓
 Load Jenkins Shared Library
-       ↓
-Initialize Pipeline
-       ↓
+        ↓
 Maven Package
-       ↓
+        ↓
 Generate Java JAR
-       ↓
+        ↓
 Docker Build
-       ↓
+        ↓
 Generate Build-Specific Image Tag
-       ↓
+        ↓
 Jenkins Credentials Injection
-       ↓
+        ↓
 Docker Hub Authentication
-       ↓
+        ↓
 Docker Push
-       ↓
+        ↓
 Versioned Image Published
-       ↓
+        ↓
 SUCCESS
 ```
 
@@ -169,6 +199,8 @@ SUCCESS
 - Jenkins Shared Libraries
 - Jenkins SCM Integration
 - Jenkins Credentials
+- GitHub Webhooks
+- Event-Driven Build Triggers
 
 ## Development & Build
 
@@ -189,6 +221,7 @@ SUCCESS
 
 - Git
 - GitHub
+- GitHub Webhooks
 - SSH Authentication
 
 ## Infrastructure / Environment
@@ -224,11 +257,19 @@ jenkins-shared-library/
 │               └── example/
 │                   └── Application.java
 │
-└── vars/
-    ├── buildImage.groovy
-    ├── buildJar.groovy
-    ├── dockerLogin.groovy
-    └── dockerPush.groovy
+├── vars/
+│   ├── buildImage.groovy
+│   ├── buildJar.groovy
+│   ├── dockerLogin.groovy
+│   └── dockerPush.groovy
+│
+├── screenshots/
+│   ├── build 25 success.png
+│   ├── dockerHub-confirmation.png
+│   ├── github-webhook-success.png
+│   └── webhook-triggered-jenkins-build.png
+│
+└── TROUBLESHOOTING-AND-LESSONS-LEARNED.md
 ```
 
 Generated Maven artifacts are created under:
@@ -249,9 +290,9 @@ java-maven-app-1.1.0-SNAPSHOT.jar
 
 The Shared Library separates easy-to-call pipeline functions from their reusable implementation logic.
 
-## `vars/`
+## Global Pipeline Functions
 
-The `vars/` directory exposes global Jenkins pipeline steps.
+The `vars/` directory exposes reusable Jenkins pipeline steps:
 
 ```text
 vars/
@@ -332,7 +373,7 @@ artifactId: java-maven-app
 version:    1.1.0-SNAPSHOT
 ```
 
-and Java 17.
+with Java 17.
 
 A successful Maven build generates:
 
@@ -390,7 +431,7 @@ ejones904/demo-app:jma-25
 
 The same image reference is passed through both the Docker build and Docker push operations.
 
-This provides simple traceability between:
+This provides traceability between the Jenkins build and the resulting container image:
 
 ```text
 Jenkins Build #25
@@ -416,7 +457,7 @@ The pipeline was updated to use my own repository:
 ejones904/demo-app
 ```
 
-This allowed the pipeline to authenticate and publish the generated images to the correct registry repository.
+This allowed the pipeline to authenticate and publish generated images to the correct registry repository.
 
 ---
 
@@ -458,7 +499,7 @@ Jenkins accesses the GitHub repository using the Jenkins credential:
 Jenkins-Github
 ```
 
-This allows Jenkins to authenticate to GitHub and retrieve the pipeline and Shared Library source.
+This allows Jenkins to authenticate to GitHub and retrieve the Pipeline and Shared Library source.
 
 ---
 
@@ -508,15 +549,247 @@ This allows the Jenkinsfile to call the reusable functionality exposed by the Sh
 
 ---
 
-# Successful Pipeline Execution
+# Automatic GitHub Webhook Build Triggers
 
-After iterative development and troubleshooting across Jenkins, GitHub, Maven, Groovy, Linux, and Docker, the complete workflow successfully executed.
+After completing the working Shared Library pipeline, the next step was removing the need to manually initiate builds from Jenkins.
+
+Previously:
+
+```text
+Git Push
+   ↓
+Open Jenkins
+   ↓
+Build Now
+   ↓
+Pipeline
+```
+
+The updated workflow is:
+
+```text
+Git Push
+   ↓
+GitHub Webhook
+   ↓
+Jenkins
+   ↓
+Pipeline Automatically Starts
+```
+
+This turns the pipeline into an event-driven CI/CD workflow.
+
+---
+
+# Jenkins Webhook Configuration
+
+Inside the Jenkins pipeline job, I navigated to:
+
+```text
+Configure
+→ Build Triggers
+```
+
+and enabled:
+
+```text
+GitHub hook trigger for GITScm polling
+```
+
+This configures the Jenkins job to respond to GitHub webhook notifications associated with source-control changes.
+
+---
+
+# GitHub Webhook Configuration
+
+The webhook was created from the GitHub repository:
+
+```text
+Repository
+→ Settings
+→ Webhooks
+→ Add webhook
+```
+
+The Jenkins webhook endpoint follows the standard format:
+
+```text
+http://<JENKINS-SERVER>:8080/github-webhook/
+```
+
+The webhook was configured with:
+
+```text
+Content type: application/json
+Event: Push events
+Active: Enabled
+```
+
+This establishes the event path:
+
+```text
+GitHub Push Event
+       ↓
+HTTP Webhook
+       ↓
+Jenkins Webhook Endpoint
+       ↓
+Jenkins Job Trigger
+```
+
+---
+
+# Webhook Connectivity Validation
+
+After creating the webhook, GitHub sent its initial:
+
+```text
+ping
+```
+
+event.
+
+The ping completed successfully.
+
+This verified that GitHub could reach the Jenkins webhook endpoint.
+
+![GitHub Webhook Success](screenshots/github-webhook-success.png)
+
+The successful delivery provides evidence of the first half of the integration:
+
+```text
+GitHub
+   ↓
+Webhook Delivery
+   ↓
+Jenkins Endpoint
+   ↓
+Reachable
+```
+
+---
+
+# End-to-End Webhook Test
+
+Connectivity alone was not enough to prove that the complete automatic build workflow worked.
+
+I wanted to validate:
+
+```text
+Code Change
+    ↓
+Git Push
+    ↓
+Webhook
+    ↓
+Jenkins Trigger
+    ↓
+Latest Code Executed
+```
+
+To make that visible, I added the following line to `script.groovy`:
+
+```groovy
+echo 'Testing the integration...'
+```
+
+I then committed the change:
+
+```bash
+git commit -m "Testing webhook setup"
+```
+
+and pushed it to GitHub.
+
+The push created the following sequence:
+
+```text
+script.groovy modified
+        ↓
+Git commit created
+        ↓
+Commit pushed to GitHub
+        ↓
+GitHub detects push
+        ↓
+GitHub sends webhook
+        ↓
+Jenkins receives webhook
+        ↓
+Jenkins job automatically starts
+        ↓
+Latest repository revision checked out
+        ↓
+Updated pipeline executes
+```
+
+---
+
+# Automatic Trigger Validation
+
+The Jenkins Console Output confirmed that the build was initiated by the GitHub push rather than manually through **Build Now**.
+
+![Webhook Triggered Jenkins Build](screenshots/webhook-triggered-jenkins-build.png)
+
+This provides direct evidence that the trigger path worked:
+
+```text
+Git Push
+   ↓
+GitHub
+   ↓
+Webhook
+   ↓
+Jenkins Automatically Starts
+```
+
+The test message:
+
+```text
+Testing the integration...
+```
+
+also provided a way to confirm that the updated repository version was being executed by the pipeline.
+
+---
+
+# Why the Webhook Matters
+
+The webhook changes the role Jenkins plays in the development workflow.
+
+Without the webhook:
+
+```text
+Developer
+    ↓
+Push Code
+    ↓
+Manually Tell Jenkins to Build
+```
+
+With the webhook:
+
+```text
+Developer
+    ↓
+Push Code
+    ↓
+Automation Takes Over
+```
+
+A source-code change becomes the event that initiates the CI/CD process.
+
+This more closely represents how continuous integration is designed to operate in a real development environment.
+
+---
+
+# Successful Shared Library Pipeline
+
+Before introducing the webhook, the underlying Shared Library CI/CD workflow successfully completed with:
 
 ```text
 Build #25
 ```
-
-completed successfully.
 
 ![Jenkins Build 25 Success](screenshots/build%2025%20success.png)
 
@@ -554,7 +827,57 @@ ejones904/demo-app
 
 ![Docker Hub Confirmation](screenshots/dockerHub-confirmation.png)
 
-This provided external validation that the CI/CD workflow completed successfully rather than relying only on the Jenkins build status.
+This provided external validation that the pipeline successfully produced and published the expected container image.
+
+---
+
+# Webhook Validation Summary
+
+The webhook integration was validated at multiple levels.
+
+### 1. GitHub Connectivity
+
+The GitHub webhook delivery successfully reached the Jenkins endpoint.
+
+### 2. Real Push Event
+
+A real repository change was committed and pushed:
+
+```text
+Testing webhook setup
+```
+
+### 3. Automatic Jenkins Trigger
+
+Jenkins started the job in response to the GitHub push without requiring **Build Now**.
+
+### 4. Latest Code Checkout
+
+Jenkins retrieved the updated repository revision.
+
+### 5. Execution Validation
+
+The updated pipeline contained:
+
+```text
+Testing the integration...
+```
+
+providing an identifiable marker that the new code was being executed.
+
+Together, these checks validated:
+
+```text
+Git Push
+   ↓
+GitHub
+   ↓
+Webhook
+   ↓
+Jenkins
+   ↓
+Updated Pipeline
+```
 
 ---
 
@@ -563,8 +886,6 @@ This provided external validation that the CI/CD workflow completed successfully
 This project required troubleshooting across nearly every layer of the CI/CD workflow.
 
 Rather than treating each error independently, I learned to use each failure to identify which part of the pipeline had successfully completed and which layer needed investigation next.
-
-Some of the most important issues included:
 
 ## Jenkins → Docker Permissions
 
@@ -676,7 +997,25 @@ A Dockerfile was added at the repository root, matching the build context used b
 docker build -t <image> .
 ```
 
-The progression of errors helped show that Jenkins was reaching farther into the pipeline as each underlying problem was resolved.
+## GitHub Webhook Payload URL Warning
+
+During webhook creation, GitHub displayed:
+
+```text
+Invalid payload URL
+```
+
+However, the webhook was still created.
+
+Rather than assuming the integration had failed based only on the warning, I checked GitHub's webhook delivery history.
+
+The initial webhook delivery succeeded.
+
+This reinforced an important troubleshooting lesson:
+
+> Validate the actual behavior of an integration instead of relying only on a UI warning.
+
+The webhook delivery history provided direct evidence that GitHub successfully contacted the Jenkins endpoint.
 
 A more detailed troubleshooting history is available in:
 
@@ -699,17 +1038,20 @@ Security practices demonstrated in this project include:
 - GitHub authentication managed through Jenkins
 - Separation of credentials from reusable Shared Library code
 
-Production improvements could include:
+The current webhook implementation uses an HTTP endpoint for the lab environment.
 
+For a production environment, improvements would include:
+
+- HTTPS/TLS for the Jenkins webhook endpoint
 - Scoped registry access tokens
 - Credential rotation
 - Dedicated Jenkins agents
 - More restrictive Docker daemon access
 - Containerized or ephemeral build agents
-- TLS
 - Centralized secrets management
 - Image vulnerability scanning
 - Least-privilege service accounts
+- Additional webhook security controls
 
 ---
 
@@ -720,7 +1062,7 @@ Production improvements could include:
 - Created reusable implementation logic under the Shared Library `src/` classpath
 - Integrated Jenkins with GitHub SCM
 - Configured Jenkins Pipeline as Code
-- Built and packaged a Java/Spring Boot application using Maven
+- Built and packaged a Java/Spring Boot application using Maven 3.9
 - Generated a deployable JAR artifact
 - Integrated Docker builds into a containerized Jenkins environment
 - Configured Jenkins access to the host Docker daemon
@@ -728,12 +1070,18 @@ Production improvements could include:
 - Automated Docker image publishing
 - Implemented Jenkins build-number-based Docker image versioning
 - Created traceability between Jenkins builds and Docker images
+- Configured GitHub push-event webhooks
+- Configured Jenkins automatic GitHub build triggers
+- Validated webhook connectivity through GitHub delivery history
+- Automatically triggered Jenkins from a Git push
+- Verified execution of the newly pushed repository revision
 - Diagnosed Linux/Docker socket permissions
 - Diagnosed Maven and Java source-path issues
 - Diagnosed Jenkins Shared Library classpath issues
 - Debugged Groovy syntax, method, variable-scope, and interpolation issues
 - Resolved GitHub/SSH and local WSL repository issues
-- Successfully completed the full pipeline with Build #25
+- Successfully completed the Shared Library pipeline with Build #25
+- Extended the project from manually triggered CI/CD to event-driven CI/CD
 
 ---
 
@@ -747,6 +1095,8 @@ A Jenkins failure can originate from:
 
 ```text
 Git
+GitHub
+HTTP Webhooks
 Groovy
 Jenkins configuration
 Shared Library structure
@@ -780,12 +1130,34 @@ Add correct Docker build definition
         ↓
 Pipeline continues farther
         ↓
-SUCCESS
+Build #25 succeeds
+        ↓
+Add GitHub webhook
+        ↓
+Validate webhook delivery
+        ↓
+Push test change
+        ↓
+Jenkins automatically starts
+        ↓
+Updated code executes
 ```
 
 Sometimes a new error is actually progress.
 
 It means the previous problem is no longer stopping the pipeline.
+
+I also learned that automation should be validated end-to-end.
+
+A successful webhook delivery proves connectivity.
+
+It does not by itself prove:
+
+```text
+Push → Trigger → Checkout → Execution
+```
+
+Following a real source-code change from Git commit through the GitHub webhook and into the automatically triggered Jenkins build provided stronger validation of the complete integration.
 
 ---
 
@@ -801,6 +1173,19 @@ It means the previous problem is no longer stopping the pipeline.
 - Jenkins SCM integration
 - Jenkins build variables
 - Jenkins Credentials
+- Automatic build triggers
+- Event-driven CI/CD
+
+## GitHub / Source Control
+
+- Git
+- GitHub
+- GitHub Webhooks
+- Push-event automation
+- SSH authentication
+- Branch configuration
+- Repository troubleshooting
+- Git-based integration testing
 
 ## Development / Automation
 
@@ -831,17 +1216,11 @@ It means the previous problem is no longer stopping the pipeline.
 - Filesystem troubleshooting
 - WSL
 
-## Source Control
+## Integration / Troubleshooting
 
-- Git
-- GitHub
-- SSH authentication
-- Branch configuration
-- Repository troubleshooting
-- Iterative commits and pushes
-
-## Troubleshooting
-
+- HTTP webhook endpoints
+- GitHub webhook delivery validation
+- Jenkins console-log analysis
 - CI/CD log analysis
 - Root-cause isolation
 - Jenkins execution context
@@ -851,24 +1230,47 @@ It means the previous problem is no longer stopping the pipeline.
 - Docker permissions
 - Docker build context
 - Registry authentication
+- End-to-end integration testing
 
 ---
 
-# Screenshots
+# Project Evidence
 
-Only the most meaningful evidence from the completed project is included.
-
-## Jenkins Build #25 — Success
+## Jenkins Shared Library Build #25 — Success
 
 ![Jenkins Build 25 Success](screenshots/build%2025%20success.png)
 
-Shows the successful end-to-end Jenkins Shared Library pipeline execution.
+Successful execution of the underlying Jenkins Shared Library CI/CD pipeline.
 
 ## Docker Hub Confirmation
 
 ![Docker Hub Confirmation](screenshots/dockerHub-confirmation.png)
 
-Confirms that the Jenkins-generated Docker image was successfully published to Docker Hub.
+External confirmation that the Jenkins-generated Docker image was successfully published to Docker Hub.
+
+## GitHub Webhook Delivery
+
+![GitHub Webhook Success](screenshots/github-webhook-success.png)
+
+Confirms that GitHub successfully delivered the webhook event to the Jenkins endpoint.
+
+## Automatically Triggered Jenkins Build
+
+![Webhook Triggered Jenkins Build](screenshots/webhook-triggered-jenkins-build.png)
+
+The Jenkins Console Output identifies the GitHub push as the build trigger, confirming that the job started automatically rather than through **Build Now**.
+
+Together, these screenshots demonstrate the progression:
+
+```text
+Working Pipeline
+       ↓
+Published Docker Image
+       ↓
+GitHub Webhook
+       ↓
+Automatic Jenkins Trigger
+```
 
 ---
 
@@ -888,21 +1290,31 @@ Potential next steps include:
 - Add automated rollback logic
 - Use dedicated Jenkins agents
 - Use ephemeral container-based build agents
-- Add webhook-triggered builds
 - Add centralized secrets management
+- Secure Jenkins and webhook traffic with HTTPS/TLS
 
-The most important next architectural improvement would be demonstrating the same Shared Library functions being consumed by multiple independent pipelines, showing how centralized CI/CD logic can be reused across applications.
+The most important architectural improvement would be demonstrating the same Shared Library functions being consumed by multiple independent application pipelines.
 
 ---
 
 # Final Result
 
-After 25 builds, multiple layers of troubleshooting, and several architecture corrections:
+The project evolved from a manually executed Jenkins pipeline into an automatically triggered CI/CD workflow.
 
 ```text
+Developer
+   ↓
+Git Commit
+   ↓
+Git Push
+   ↓
 GitHub
    ↓
-Jenkins
+GitHub Webhook
+   ↓
+Jenkins Automatically Triggered
+   ↓
+SCM Checkout
    ↓
 Jenkins Shared Library
    ↓
@@ -921,9 +1333,9 @@ Docker Hub
 SUCCESS
 ```
 
-The pipeline worked end-to-end.
+The pipeline now responds automatically to source-code changes rather than depending on a manual Jenkins build.
 
-More importantly, I came away with a much better understanding of what is actually happening between each of those arrows.
+More importantly, I came away with a much better understanding of what is actually happening between each of those arrows — and how to troubleshoot those connections when they do not work as expected.
 
 ---
 
