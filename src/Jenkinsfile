@@ -87,7 +87,7 @@ pipeline {
 
                         sh 'git add pom.xml'
                         sh 'git commit -m "ci: version bump"'
-                        sh 'git push origin main'
+                        sh 'git push origin HEAD:main'
                     }
                 }
             }
