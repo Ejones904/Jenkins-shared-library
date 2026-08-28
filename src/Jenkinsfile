@@ -11,6 +11,14 @@ pipeline {
     }
 
     stages {
+    stage('check for ci skip') {
+        steps {
+            scmSkip(
+                skipPattern: '.*\\[ci skip\\].*',
+                deleteBuild: false
+            )
+        }
+    }
 
         stage('increment version') {
             steps {
@@ -82,11 +90,9 @@ pipeline {
                         sh 'git status'
                         sh 'git branch'
                         sh 'git config --list'
-
                         sh 'git remote set-url origin https://${USER}:${PASS}@github.com/Ejones904/Jenkins-shared-library.git'
-
                         sh 'git add pom.xml'
-                        sh 'git commit -m "ci: version bump"'
+                        sh 'git commit -m "ci: version bump [ci skip]"'
                         sh 'git push origin HEAD:main'
                     }
                 }
