@@ -1,241 +1,121 @@
-# Jenkins Shared Library CI/CD Pipeline with Automatic GitHub Webhooks
+# Jenkins Shared Library CI/CD Pipeline with GitHub Webhooks and Automated Versioning
 
 ## Project Overview
 
-This project started as an exercise in creating a Jenkins Shared Library.
+This project demonstrates the progression of a Jenkins CI/CD pipeline from a manually triggered build into an event-driven and automatically versioned delivery workflow.
 
-It turned into a much deeper lesson in how CI/CD systems actually work.
+The pipeline uses a reusable Jenkins Shared Library to build a Java application with Maven, create a Docker image, authenticate securely to Docker Hub, and publish the resulting image.
 
-The original goal was to take pipeline functionality that would normally live directly inside a Jenkinsfile and move it into reusable Groovy functions that Jenkins pipelines could call when needed.
+GitHub webhooks were then added so that pushing code automatically triggers Jenkins.
 
-After successfully building the Shared Library pipeline, I extended the project by integrating a **GitHub webhook**, allowing source-code changes to automatically trigger Jenkins instead of requiring me to manually select **Build Now**.
+The project was further enhanced by adding automated Maven application versioning. Jenkins now increments the application version during the pipeline, uses that version to generate a traceable Docker image tag, and commits the updated `pom.xml` back to GitHub.
 
-The final solution integrates:
+Because the Jenkins-generated Git commit also triggers the GitHub webhook, SCM Skip and a `[ci skip]` commit convention were implemented to prevent an infinite CI/CD loop.
 
-- GitHub
-- GitHub Webhooks
-- Jenkins
-- Jenkins Shared Libraries
-- Groovy
-- Maven 3.9
-- Java / Spring Boot
-- Docker
-- Docker Hub
-- Jenkins Credentials
-- Linux permissions
-- Event-driven CI/CD automation
-
-After extensive troubleshooting and 25 Jenkins builds, the underlying Shared Library pipeline successfully built the application, created a Docker image, and published the versioned image to Docker Hub.
-
-The webhook integration then changed the workflow from:
-
-```text
-Code Change
-    ↓
-Git Push
-    ↓
-Manually Start Jenkins
-    ↓
-Pipeline Runs
-```
-
-to:
-
-```text
-Code Change
-    ↓
-Git Push
-    ↓
-GitHub Webhook
-    ↓
-Jenkins Automatically Triggered
-    ↓
-CI/CD Pipeline Runs
-```
-
-This project reinforced something important for me: getting a pipeline to work is only part of CI/CD engineering.
-
-Understanding why it fails, isolating each layer, and following the errors until the actual root cause is found is just as important.
+The final result is an event-driven CI/CD workflow where a normal developer push can automatically trigger the build, version, containerization, publishing, and source-control update process.
 
 ---
 
 # Business / Engineering Problem
 
-CI/CD pipelines often repeat the same logic across multiple applications.
+A CI/CD pipeline should reduce the number of manual actions required to move a code change through the build process.
 
-For example:
+Earlier versions of this project still required several manual considerations:
 
-```text
-Build application
-Build container image
-Authenticate to registry
-Push container image
-```
+* Jenkins had to be triggered manually.
+* Docker image versions had to be managed manually.
+* Application versions were not automatically persisted.
+* Build logic could become duplicated across Jenkinsfiles.
+* Automated Git commits could potentially trigger recursive CI/CD executions.
 
-Copying this logic into every Jenkinsfile creates duplication and makes pipelines harder to maintain.
+The goal was to progressively remove those manual dependencies while keeping the pipeline reusable, traceable, and secure.
 
-Jenkins Shared Libraries provide a way to centralize reusable CI/CD functionality.
+The resulting workflow addresses these problems through:
 
-Instead of putting all implementation logic directly into a Jenkinsfile, pipelines can call reusable functions such as:
-
-```groovy
-buildJar()
-buildImage()
-dockerLogin()
-dockerPush()
-```
-
-The implementation behind those functions can then be maintained centrally.
-
-There was also another manual step in the original workflow:
-
-```text
-Developer pushes code
-        ↓
-Developer opens Jenkins
-        ↓
-Developer clicks Build Now
-```
-
-By integrating GitHub Webhooks, the pipeline can now respond automatically to source-code changes.
-
-Together, Shared Libraries and webhook automation provide a foundation for more standardized, reusable, and event-driven CI/CD automation.
+* Jenkins Shared Libraries
+* GitHub webhooks
+* Maven version automation
+* Dynamic Docker image tagging
+* Jenkins Credentials
+* Automated Git commits
+* SCM Skip
+* `[ci skip]` commit conventions
 
 ---
 
 # Final Architecture
 
 ```text
-┌───────────────────────┐
-│       Developer       │
-│    Modify / Commit    │
-└───────────┬───────────┘
-            │
-            │ git push
-            ▼
-┌───────────────────────┐
-│        GitHub         │
-│      Repository       │
-└───────────┬───────────┘
-            │
-            │ Push Event
-            │ GitHub Webhook
-            ▼
-┌───────────────────────┐
-│        Jenkins        │
-│      CI/CD Job        │
-└───────────┬───────────┘
-            │
-            ├── SCM Checkout
-            │
-            ├── Load Shared Library
-            │
-            ├── Maven Package
-            │
-            ├── Docker Build
-            │
-            ├── Docker Login
-            │
-            └── Docker Push
-            │
-            ▼
-┌───────────────────────┐
-│      Docker Hub       │
-│   ejones904/demo-app  │
-│    jma-<BUILD_NUM>    │
-└───────────────────────┘
-```
-
----
-
-# CI/CD Workflow
-
-The completed workflow follows this sequence:
-
-```text
-Developer Changes Code
-        ↓
-Git Commit
-        ↓
-Git Push
-        ↓
-GitHub Detects Push
-        ↓
-GitHub Webhook
-        ↓
-Jenkins Automatically Triggered
-        ↓
-SCM Checkout
-        ↓
-Load Jenkins Shared Library
-        ↓
-Maven Package
-        ↓
-Generate Java JAR
-        ↓
-Docker Build
-        ↓
-Generate Build-Specific Image Tag
-        ↓
-Jenkins Credentials Injection
-        ↓
-Docker Hub Authentication
-        ↓
-Docker Push
-        ↓
-Versioned Image Published
-        ↓
-SUCCESS
+Developer
+    │
+    │ git push
+    ▼
+GitHub Repository
+    │
+    │ GitHub Webhook
+    ▼
+Jenkins
+    │
+    ├── Check SCM Skip
+    │
+    ├── Increment Maven Version
+    │
+    ├── Generate Dynamic Image Version
+    │
+    ├── Build Java Application
+    │
+    ├── Build Docker Image
+    │
+    ├── Authenticate to Docker Hub
+    │
+    ├── Push Docker Image
+    │
+    ├── Deploy Stage
+    │
+    └── Commit Updated pom.xml
+             │
+             │ HTTPS + Jenkins GitHub Credential
+             ▼
+        GitHub Repository
+             │
+             │ ci: version bump [ci skip]
+             ▼
+        GitHub Webhook
+             │
+             ▼
+           Jenkins
+             │
+             └── SCM Skip detects [ci skip]
+                         │
+                         ▼
+                  Pipeline Skipped
 ```
 
 ---
 
 # Technology Stack
 
-## CI/CD
-
-- Jenkins
-- Jenkins Declarative Pipeline
-- Jenkins Shared Libraries
-- Jenkins SCM Integration
-- Jenkins Credentials
-- GitHub Webhooks
-- Event-Driven Build Triggers
-
-## Development & Build
-
-- Groovy
-- Java 17
-- Spring Boot
-- Maven 3.9
-
-## Containers
-
-- Docker
-- Dockerfile
-- Docker Hub
-- Docker Registry Authentication
-- Docker Socket Integration
-
-## Source Control
-
-- Git
-- GitHub
-- GitHub Webhooks
-- SSH Authentication
-
-## Infrastructure / Environment
-
-- Linux
-- Docker
-- WSL
-- IntelliJ IDEA
+| Technology                   | Purpose                                         |
+| ---------------------------- | ----------------------------------------------- |
+| Jenkins                      | CI/CD automation                                |
+| Jenkins Declarative Pipeline | Pipeline as Code                                |
+| Jenkins Shared Library       | Reusable pipeline logic                         |
+| GitHub                       | Source control                                  |
+| GitHub Webhooks              | Automatic Jenkins triggering                    |
+| Groovy                       | Jenkins pipeline and Shared Library development |
+| Maven 3.9                    | Java build and dependency management            |
+| Maven Build Helper Plugin    | Maven version parsing                           |
+| Maven Versions Plugin        | Application version modification                |
+| Java 17                      | Application runtime                             |
+| Docker                       | Application containerization                    |
+| Docker Hub                   | Container image registry                        |
+| Jenkins Credentials          | Secure credential management                    |
+| Git                          | Source-control automation                       |
+| SCM Skip                     | CI recursion prevention                         |
 
 ---
 
 # Repository Structure
-
-The project combines application source code with Jenkins Shared Library components.
 
 ```text
 jenkins-shared-library/
@@ -243,10 +123,21 @@ jenkins-shared-library/
 ├── Dockerfile
 ├── pom.xml
 ├── script.groovy
+├── README.md
+├── TROUBLESHOOTING-AND-LESSONS-LEARNED.md
+│
+├── screenshots/
+│   ├── build 25 success.png
+│   ├── dockerHub-confirmation.png
+│   ├── github-webhook-success.png
+│   ├── webhook-triggered-jenkins-build.png
+│   ├── automatic-version-increment-stage.png
+│   ├── scm-skip-pipeline-stage-view.png
+│   ├── automatic-versioning-dockerhub.png
+│   └── jenkins-automated-version-commit.png
 │
 ├── src/
 │   ├── Jenkinsfile
-│   │
 │   ├── com/
 │   │   └── example/
 │   │       └── Docker.groovy
@@ -257,767 +148,876 @@ jenkins-shared-library/
 │               └── example/
 │                   └── Application.java
 │
-├── vars/
-│   ├── buildImage.groovy
-│   ├── buildJar.groovy
-│   ├── dockerLogin.groovy
-│   └── dockerPush.groovy
-│
-├── screenshots/
-│   ├── build 25 success.png
-│   ├── dockerHub-confirmation.png
-│   ├── github-webhook-success.png
-│   └── webhook-triggered-jenkins-build.png
-│
-└── TROUBLESHOOTING-AND-LESSONS-LEARNED.md
-```
-
-Generated Maven artifacts are created under:
-
-```text
-target/
-```
-
-including:
-
-```text
-java-maven-app-1.1.0-SNAPSHOT.jar
+└── vars/
+    ├── buildImage.groovy
+    ├── buildJar.groovy
+    ├── dockerLogin.groovy
+    └── dockerPush.groovy
 ```
 
 ---
 
 # Jenkins Shared Library Design
 
-The Shared Library separates easy-to-call pipeline functions from their reusable implementation logic.
+One of the first goals of this project was separating reusable CI/CD logic from the Jenkinsfile.
 
-## Global Pipeline Functions
+Instead of putting every Maven and Docker command directly inside the pipeline, reusable functions were created under the Shared Library.
 
-The `vars/` directory exposes reusable Jenkins pipeline steps:
-
-```text
-vars/
-├── buildImage.groovy
-├── buildJar.groovy
-├── dockerLogin.groovy
-└── dockerPush.groovy
-```
-
-These allow the Jenkinsfile to use simple calls such as:
-
-```groovy
-buildJar()
-buildImage "ejones904/demo-app:${imageTag}"
-dockerLogin()
-dockerPush "ejones904/demo-app:${imageTag}"
-```
-
-This keeps the Jenkinsfile easier to read and reduces duplicated pipeline logic.
-
----
-
-# Shared Library Classes
-
-Reusable implementation classes are stored under:
-
-```text
-src/com/example/
-```
-
-For example:
-
-```text
-src/com/example/Docker.groovy
-```
-
-This class contains reusable Docker-related implementation logic.
-
-One of the important lessons from this project was understanding that Jenkins Shared Library classes and Maven application classes use different directory conventions.
-
-Jenkins Shared Library class:
-
-```text
-src/com/example/Docker.groovy
-```
-
-Maven Java application class:
-
-```text
-src/main/java/com/example/Application.java
-```
-
-Understanding which tool owns which source structure became critical to getting the pipeline working correctly.
-
----
-
-# Maven Build Process
-
-The Java application is packaged through Maven.
-
-The Shared Library exposes the build functionality through:
-
-```groovy
-buildJar()
-```
-
-which ultimately executes:
-
-```bash
-mvn package
-```
-
-The Maven project uses:
-
-```text
-groupId:    com.example
-artifactId: java-maven-app
-version:    1.1.0-SNAPSHOT
-```
-
-with Java 17.
-
-A successful Maven build generates:
-
-```text
-target/java-maven-app-1.1.0-SNAPSHOT.jar
-```
-
-The resulting JAR becomes the application artifact used during the Docker image build.
-
----
-
-# Docker Build Automation
-
-Docker functionality was separated into reusable operations:
-
-```text
-Build Image
-    ↓
-Docker Login
-    ↓
-Push Image
-```
-
-The Shared Library exposes these through:
-
-```groovy
-buildImage()
-dockerLogin()
-dockerPush()
-```
-
-This separation made the Docker lifecycle easier to understand, reuse, and troubleshoot.
-
----
-
-# Dynamic Docker Image Versioning
-
-Rather than continuously publishing the same static image tag, the pipeline uses the Jenkins build number to generate a unique image tag.
-
-```groovy
-def imageTag = "jma-${env.BUILD_NUMBER}"
-```
-
-The resulting image reference becomes:
-
-```text
-ejones904/demo-app:jma-<BUILD_NUMBER>
-```
-
-For example:
-
-```text
-ejones904/demo-app:jma-25
-```
-
-The same image reference is passed through both the Docker build and Docker push operations.
-
-This provides traceability between the Jenkins build and the resulting container image:
-
-```text
-Jenkins Build #25
-        ↓
-Docker Image jma-25
-```
-
----
-
-# Docker Hub Integration
-
-The final container image is published to:
-
-```text
-docker.io/ejones904/demo-app
-```
-
-The project originally referenced a training/demo Docker Hub repository that was not owned by my account.
-
-The pipeline was updated to use my own repository:
-
-```text
-ejones904/demo-app
-```
-
-This allowed the pipeline to authenticate and publish generated images to the correct registry repository.
-
----
-
-# Credential Management
-
-Credentials are managed through Jenkins rather than stored directly in source control.
-
-## Docker Hub
-
-The Jenkins credential ID used for Docker Hub is:
-
-```text
-docker-hub-repo
-```
-
-The pipeline injects the username and password only when required.
-
-Conceptually:
-
-```groovy
-withCredentials([
-    usernamePassword(
-        credentialsId: 'docker-hub-repo',
-        passwordVariable: 'PASS',
-        usernameVariable: 'USER'
-    )
-]) {
-    sh "echo '${PASS}' | docker login -u '${USER}' --password-stdin"
-}
-```
-
-This prevents Docker Hub credentials from being hard-coded into the repository.
-
-## GitHub
-
-Jenkins accesses the GitHub repository using the Jenkins credential:
-
-```text
-Jenkins-Github
-```
-
-This allows Jenkins to authenticate to GitHub and retrieve the Pipeline and Shared Library source.
-
----
-
-# Jenkins and Docker Integration
-
-Jenkins runs inside a Docker container using:
-
-```text
-jenkins/jenkins:lts
-```
-
-The host Docker socket is mounted into the Jenkins container:
-
-```text
-/var/run/docker.sock:/var/run/docker.sock
-```
-
-This allows Jenkins running inside the container to communicate with the Docker daemon on the host and execute commands such as:
-
-```bash
-docker build
-docker login
-docker push
-```
-
-Correct Linux group permissions are required for the Jenkins user to access the Docker socket.
-
----
-
-# Pipeline as Code
-
-The Jenkins Pipeline definition is stored at:
-
-```text
-src/Jenkinsfile
-```
-
-Jenkins SCM configuration points to this path when retrieving the Pipeline from GitHub.
-
-The Shared Library is loaded using:
+The pipeline loads the library using:
 
 ```groovy
 @Library('jenkins-shared-library') _
 ```
 
-This allows the Jenkinsfile to call the reusable functionality exposed by the Shared Library.
+Reusable functions include:
+
+```text
+buildJar()
+buildImage()
+dockerLogin()
+dockerPush()
+```
+
+This makes the Jenkinsfile easier to read and allows common build logic to be reused across future pipelines.
 
 ---
 
-# Automatic GitHub Webhook Build Triggers
+# Shared Library Classes
 
-After completing the working Shared Library pipeline, the next step was removing the need to manually initiate builds from Jenkins.
-
-Previously:
+Reusable Docker functionality was also organized under:
 
 ```text
-Git Push
-   ↓
-Open Jenkins
-   ↓
-Build Now
-   ↓
-Pipeline
+src/com/example/Docker.groovy
 ```
 
-The updated workflow is:
+This required learning how Jenkins Shared Libraries expect Groovy source files to be structured.
+
+One of the issues encountered during development was placing `Docker.groovy` under the normal Maven Java source path.
+
+Jenkins could not resolve:
 
 ```text
-Git Push
-   ↓
-GitHub Webhook
-   ↓
-Jenkins
-   ↓
-Pipeline Automatically Starts
+com.example.Docker
 ```
 
-This turns the pipeline into an event-driven CI/CD workflow.
+The file was moved into the Shared Library source structure:
+
+```text
+src/com/example/Docker.groovy
+```
+
+This allowed Jenkins to correctly load the class.
 
 ---
 
-# Jenkins Webhook Configuration
+# Maven Build Process
 
-Inside the Jenkins pipeline job, I navigated to:
+The Java application is built using Maven 3.9.
+
+The build process compiles the Java source and produces the application JAR.
+
+The application source follows the standard Maven structure:
 
 ```text
-Configure
-→ Build Triggers
+src/main/java/com/example/Application.java
 ```
 
-and enabled:
+Earlier in the project, the source was accidentally located under:
 
 ```text
-GitHub hook trigger for GITScm polling
+src/src/main/java/
 ```
 
-This configures the Jenkins job to respond to GitHub webhook notifications associated with source-control changes.
-
----
-
-# GitHub Webhook Configuration
-
-The webhook was created from the GitHub repository:
+This caused Maven to report:
 
 ```text
-Repository
-→ Settings
-→ Webhooks
-→ Add webhook
+No sources to compile
 ```
 
-The Jenkins webhook endpoint follows the standard format:
+Correcting the directory structure allowed Maven to compile the application successfully.
+
+The compiled class was verified under:
 
 ```text
-http://<JENKINS-SERVER>:8080/github-webhook/
-```
-
-The webhook was configured with:
-
-```text
-Content type: application/json
-Event: Push events
-Active: Enabled
-```
-
-This establishes the event path:
-
-```text
-GitHub Push Event
-       ↓
-HTTP Webhook
-       ↓
-Jenkins Webhook Endpoint
-       ↓
-Jenkins Job Trigger
+target/classes/com/example/Application.class
 ```
 
 ---
 
-# Webhook Connectivity Validation
+# Docker Build Automation
 
-After creating the webhook, GitHub sent its initial:
+The Jenkins Shared Library handles Docker image creation instead of requiring Docker commands to be repeated throughout the Jenkinsfile.
 
-```text
-ping
+The pipeline calls the reusable function with the dynamically generated image tag:
+
+```groovy
+buildImage "ejones904/demo-app:${env.IMAGE_NAME}"
 ```
 
-event.
+Docker Hub authentication is handled separately:
 
-The ping completed successfully.
-
-This verified that GitHub could reach the Jenkins webhook endpoint.
-
-![GitHub Webhook Success](screenshots/github-webhook-success.png)
-
-The successful delivery provides evidence of the first half of the integration:
-
-```text
-GitHub
-   ↓
-Webhook Delivery
-   ↓
-Jenkins Endpoint
-   ↓
-Reachable
+```groovy
+dockerLogin()
 ```
+
+The resulting image is then published using:
+
+```groovy
+dockerPush "ejones904/demo-app:${env.IMAGE_NAME}"
+```
+
+Separating these operations keeps the Shared Library functions focused on individual responsibilities.
 
 ---
 
-# End-to-End Webhook Test
+# Dynamic JAR Execution
 
-Connectivity alone was not enough to prove that the complete automatic build workflow worked.
+Automated Maven versioning means the JAR filename changes as the application version changes.
 
-I wanted to validate:
+Hardcoding a specific version into the Dockerfile would therefore break future builds.
+
+The Dockerfile was adjusted to execute the dynamically versioned JAR using:
+
+```dockerfile
+CMD java -jar java-maven-app-*.jar
+```
+
+This removes the Docker runtime's dependency on a specific Maven version number.
+
+As Maven generates new application versions, the container can continue to execute the resulting JAR without requiring the Dockerfile to be manually updated.
+
+---
+
+# GitHub Webhook Automation
+
+Originally, the pipeline required Jenkins to be started manually after a code change.
+
+The workflow looked like:
 
 ```text
 Code Change
     ↓
 Git Push
     ↓
-Webhook
+Manually Start Jenkins
     ↓
-Jenkins Trigger
-    ↓
-Latest Code Executed
+Pipeline
 ```
 
-To make that visible, I added the following line to `script.groovy`:
+GitHub webhooks were added to remove this manual step.
 
-```groovy
-echo 'Testing the integration...'
-```
-
-I then committed the change:
-
-```bash
-git commit -m "Testing webhook setup"
-```
-
-and pushed it to GitHub.
-
-The push created the following sequence:
+The updated workflow became:
 
 ```text
-script.groovy modified
-        ↓
-Git commit created
-        ↓
-Commit pushed to GitHub
-        ↓
-GitHub detects push
-        ↓
-GitHub sends webhook
-        ↓
-Jenkins receives webhook
-        ↓
-Jenkins job automatically starts
-        ↓
-Latest repository revision checked out
-        ↓
-Updated pipeline executes
+Code Change
+    ↓
+Git Push
+    ↓
+GitHub
+    ↓
+Webhook
+    ↓
+Jenkins Automatically Triggered
+    ↓
+Pipeline
 ```
 
 ---
 
-# Automatic Trigger Validation
+# Jenkins Webhook Configuration
 
-The Jenkins Console Output confirmed that the build was initiated by the GitHub push rather than manually through **Build Now**.
+The Jenkins pipeline job was configured with:
+
+```text
+GitHub hook trigger for GITScm polling
+```
+
+This allows Jenkins to react to webhook events generated by GitHub.
+
+---
+
+# GitHub Webhook Configuration
+
+A GitHub webhook was configured for the repository using the Jenkins webhook endpoint.
+
+The webhook was configured for push events using:
+
+```text
+Content-Type: application/json
+```
+
+GitHub successfully delivered the initial webhook ping, confirming connectivity between GitHub and Jenkins.
+
+A real Git push was then performed to validate the complete workflow.
+
+Jenkins automatically started the pipeline without manually selecting **Build Now**.
+
+![GitHub Webhook Success](screenshots/github-webhook-success.png)
 
 ![Webhook Triggered Jenkins Build](screenshots/webhook-triggered-jenkins-build.png)
 
-This provides direct evidence that the trigger path worked:
+---
 
-```text
-Git Push
-   ↓
-GitHub
-   ↓
-Webhook
-   ↓
-Jenkins Automatically Starts
+# Automatic Maven Version Incrementing
+
+After webhook automation was working, the next goal was removing manual application version management.
+
+Before integrating the logic into Jenkins, Maven version incrementing was tested directly from the command line.
+
+The Maven Build Helper and Versions plugins were used to parse the existing version and increment the patch version.
+
+The logic was then moved into the Jenkins pipeline.
+
+A new stage was added:
+
+```groovy
+stage('increment version') {
+    steps {
+        script {
+            echo 'incrementing app version...'
+
+            sh '''
+                mvn build-helper:parse-version versions:set \
+                    -DnewVersion='${parsedVersion.majorVersion}.${parsedVersion.minorVersion}.${parsedVersion.nextIncrementalVersion}' \
+                    versions:commit
+            '''
+
+            def matcher = readFile('pom.xml') =~ '<version>(.+)</version>'
+            def version = matcher[0][1]
+
+            env.IMAGE_NAME = "${version}-${BUILD_NUMBER}"
+
+            echo "Image name: ${env.IMAGE_NAME}"
+        }
+    }
+}
 ```
-
-The test message:
-
-```text
-Testing the integration...
-```
-
-also provided a way to confirm that the updated repository version was being executed by the pipeline.
 
 ---
 
-# Why the Webhook Matters
+# How Automatic Versioning Works
 
-The webhook changes the role Jenkins plays in the development workflow.
+The Maven Build Helper plugin parses the current project version.
 
-Without the webhook:
-
-```text
-Developer
-    ↓
-Push Code
-    ↓
-Manually Tell Jenkins to Build
-```
-
-With the webhook:
+For example:
 
 ```text
-Developer
-    ↓
-Push Code
-    ↓
-Automation Takes Over
+1.1.0
 ```
 
-A source-code change becomes the event that initiates the CI/CD process.
+is broken into version components including:
 
-This more closely represents how continuous integration is designed to operate in a real development environment.
+```text
+majorVersion = 1
+minorVersion = 1
+incrementalVersion = 0
+```
+
+The pipeline uses:
+
+```text
+parsedVersion.nextIncrementalVersion
+```
+
+to calculate the next patch version.
+
+The result becomes:
+
+```text
+1.1.1
+```
+
+The Maven Versions plugin then updates `pom.xml` with the new application version.
+
+This means application version management is now part of the CI/CD process rather than a manual developer task.
+
+![Automatic Version Increment Stage](screenshots/automatic-version-increment-stage.png)
+
+---
+
+# Maven and Shell Quoting
+
+One of the more interesting troubleshooting issues occurred because the pipeline combines several different interpretation layers:
+
+```text
+Groovy
+   ↓
+Jenkins
+   ↓
+Shell
+   ↓
+Maven
+```
+
+The Maven version expression initially caused:
+
+```text
+Bad substitution
+```
+
+The shell attempted to interpret:
+
+```text
+${parsedVersion.majorVersion}
+```
+
+as a shell variable.
+
+However, the expression belongs to Maven.
+
+The Maven expression was protected with shell single quotes:
+
+```groovy
+-DnewVersion='${parsedVersion.majorVersion}.${parsedVersion.minorVersion}.${parsedVersion.nextIncrementalVersion}'
+```
+
+This allows the expression to reach Maven without `/bin/sh` trying to expand it first.
+
+Another syntax issue involved an accidental trailing quote after:
+
+```text
+versions:commit
+```
+
+which resulted in:
+
+```text
+Syntax error: Unterminated quoted string
+```
+
+Removing the extra quote corrected the pipeline syntax.
+
+These issues reinforced how important quoting becomes when Groovy, Jenkins, shell commands, and Maven expressions are all interacting within the same pipeline.
+
+---
+
+# Dynamic Docker Image Versioning
+
+After Maven updates `pom.xml`, Jenkins reads the new application version:
+
+```groovy
+def matcher = readFile('pom.xml') =~ '<version>(.+)</version>'
+def version = matcher[0][1]
+```
+
+The application version is then combined with the Jenkins build number:
+
+```groovy
+env.IMAGE_NAME = "${version}-${BUILD_NUMBER}"
+```
+
+For example:
+
+```text
+Application Version: 1.1.1
+Jenkins Build:       32
+```
+
+produces:
+
+```text
+1.1.1-32
+```
+
+The Docker image can therefore be published as:
+
+```text
+ejones904/demo-app:1.1.1-32
+```
+
+This gives every image a direct relationship to both the application version and the Jenkins execution that created it.
+
+```text
+Application Version
+        +
+Jenkins Build Number
+        ↓
+Docker Image Tag
+```
+
+This improves traceability and removes the need to manually change Docker image versions between builds.
+
+![Automatic Versioning Docker Hub](screenshots/automatic-versioning-dockerhub.png)
+
+---
+
+# Allowing Jenkins to Commit Version Changes
+
+Automatically changing the Maven version inside the Jenkins workspace created another problem.
+
+If Jenkins only modified:
+
+```text
+pom.xml
+```
+
+inside its workspace, the version change would not become part of the source repository.
+
+A future checkout could therefore return to the previous version.
+
+To make the version increment persistent, Jenkins was given the ability to commit the updated `pom.xml` back to GitHub.
+
+The pipeline includes a version commit stage similar to:
+
+```groovy
+stage("commit version update") {
+    steps {
+        script {
+            withCredentials([usernamePassword(
+                credentialsId: 'Jenkins-Github',
+                passwordVariable: 'PASS',
+                usernameVariable: 'USER'
+            )]) {
+
+                sh 'git config --global user.name "Jenkins CI"'
+                sh 'git config --global user.email "jenkins@local"'
+
+                sh 'git status'
+                sh 'git branch'
+                sh 'git config --list'
+
+                sh 'git remote set-url origin https://${USER}:${PASS}@github.com/Ejones904/Jenkins-shared-library.git'
+
+                sh 'git add pom.xml'
+                sh 'git commit -m "ci: version bump [ci skip]"'
+                sh 'git push origin HEAD:main'
+            }
+        }
+    }
+}
+```
+
+Jenkins can now:
+
+```text
+Increment Version
+       ↓
+Modify pom.xml
+       ↓
+Commit pom.xml
+       ↓
+Push Version Update
+       ↓
+GitHub main
+```
+
+![Jenkins Automated Version Commit](screenshots/jenkins-automated-version-commit.png)
+
+---
+
+# Jenkins Git Identity
+
+Git requires an author identity before Jenkins can create a commit.
+
+The pipeline configures the automated Git author as:
+
+```bash
+git config --global user.name "Jenkins CI"
+git config --global user.email "jenkins@local"
+```
+
+This identifies automated commits separately from developer commits.
+
+It is important to distinguish Git identity from authentication.
+
+These settings identify **who authored the commit**.
+
+They do not provide Jenkins with permission to push to GitHub.
+
+---
+
+# GitHub Authentication
+
+GitHub authentication is handled through Jenkins Credentials.
+
+The existing credential:
+
+```text
+Jenkins-Github
+```
+
+stores the GitHub username and Personal Access Token.
+
+The pipeline retrieves the credential using:
+
+```groovy
+withCredentials([usernamePassword(
+    credentialsId: 'Jenkins-Github',
+    passwordVariable: 'PASS',
+    usernameVariable: 'USER'
+)])
+```
+
+The remote can then be configured for the authenticated operation without storing the PAT directly in the Jenkinsfile.
+
+This keeps the secret out of source control.
+
+---
+
+# Jenkins Detached HEAD Troubleshooting
+
+The first automated Git push attempted:
+
+```bash
+git push origin main
+```
+
+and failed with:
+
+```text
+error: src refspec main does not match any
+error: failed to push some refs
+```
+
+This exposed an important Jenkins/Git behavior.
+
+Jenkins SCM checkout does not necessarily leave the workspace on a normal local `main` branch. The checkout can operate from a detached `HEAD`.
+
+Instead of assuming that a local `main` branch existed, the push was changed to:
+
+```bash
+git push origin HEAD:main
+```
+
+This explicitly tells Git to take the commit currently checked out by Jenkins and push it to the remote `main` branch.
+
+```text
+Jenkins HEAD
+     ↓
+git push origin HEAD:main
+     ↓
+GitHub main
+```
+
+This resolved the automated Git push.
+
+---
+
+# Preventing an Infinite CI/CD Loop
+
+Giving Jenkins permission to modify the same repository that triggers Jenkins introduced an important architectural problem.
+
+The normal workflow is:
+
+```text
+Developer Push
+      ↓
+GitHub
+      ↓
+Webhook
+      ↓
+Jenkins
+```
+
+But Jenkins now also pushes its version update:
+
+```text
+Developer Push
+      ↓
+Jenkins Pipeline
+      ↓
+Increment Version
+      ↓
+Jenkins Commit
+      ↓
+Jenkins Push
+      ↓
+GitHub
+      ↓
+Webhook
+      ↓
+Jenkins Again
+```
+
+Without a guardrail, that second build could increment the version again, push another commit, fire another webhook, and continue indefinitely.
+
+This meant CI recursion had to be intentionally handled.
+
+---
+
+# SCM Skip Implementation
+
+The Jenkins SCM Skip plugin was implemented to solve the recursive build problem.
+
+A new stage was placed at the beginning of the pipeline:
+
+```groovy
+stage('check for ci skip') {
+    steps {
+        scmSkip(
+            skipPattern: '.*\\[ci skip\\].*',
+            deleteBuild: false
+        )
+    }
+}
+```
+
+The automated Jenkins commit uses:
+
+```text
+ci: version bump [ci skip]
+```
+
+Normal developer commits do not contain this marker.
+
+Therefore, a normal push proceeds through the entire pipeline:
+
+```text
+Developer Commit
+      ↓
+Webhook
+      ↓
+Jenkins
+      ↓
+SCM Skip Check
+      ↓
+No [ci skip]
+      ↓
+Continue Pipeline
+```
+
+After Jenkins completes the pipeline, it creates:
+
+```text
+ci: version bump [ci skip]
+```
+
+That commit is pushed to GitHub.
+
+GitHub still sends another webhook.
+
+The resulting Jenkins execution sees:
+
+```text
+[ci skip]
+```
+
+and does not execute the complete CI/CD workflow.
+
+```text
+Jenkins Version Commit
+      ↓
+GitHub
+      ↓
+Webhook
+      ↓
+Jenkins
+      ↓
+SCM Skip
+      ↓
+[ci skip] detected
+      ↓
+Pipeline skipped
+```
+
+An important distinction is that SCM Skip does **not** prevent GitHub from sending the webhook.
+
+Instead, Jenkins receives the webhook and determines that the resulting pipeline execution should be skipped.
+
+This prevents an infinite automated version-bump cycle.
+
+---
+
+# SCM Skip Validation
+
+The final behavior was validated through consecutive Jenkins executions.
+
+**Build #39** completed the normal CI/CD pipeline successfully.
+
+The Jenkins-generated version commit then triggered another webhook.
+
+**Build #40** detected the `[ci skip]` marker and skipped the complete pipeline.
+
+This demonstrated both sides of the workflow:
+
+```text
+Build #39
+Normal Developer Change
+      ↓
+Full Pipeline
+      ↓
+SUCCESS
+
+Build #40
+Jenkins Version Commit
+      ↓
+[ci skip]
+      ↓
+PIPELINE SKIPPED
+```
+
+![SCM Skip Pipeline Stage View](screenshots/scm-skip-pipeline-stage-view.png)
 
 ---
 
 # Successful Shared Library Pipeline
 
-Before introducing the webhook, the underlying Shared Library CI/CD workflow successfully completed with:
+Before the webhook and automatic versioning enhancements were added, the underlying Shared Library pipeline was successfully validated with Jenkins **Build #25**.
 
-```text
-Build #25
-```
+That build confirmed that the reusable Jenkins Shared Library could:
+
+* Build the Java application.
+* Package the Maven artifact.
+* Build a Docker image.
+* Authenticate using Jenkins Credentials.
+* Push the image to Docker Hub.
 
 ![Jenkins Build 25 Success](screenshots/build%2025%20success.png)
 
-The successful build confirmed that Jenkins could:
-
-```text
-Checkout Source
-      ↓
-Load Shared Library
-      ↓
-Build Java Application
-      ↓
-Package JAR
-      ↓
-Build Docker Image
-      ↓
-Authenticate to Docker Hub
-      ↓
-Push Versioned Image
-      ↓
-SUCCESS
-```
-
----
-
-# Docker Hub Validation
-
-The result was also validated outside Jenkins.
-
-Docker Hub confirmed that the versioned image produced by the pipeline was successfully published to:
-
-```text
-ejones904/demo-app
-```
+Docker Hub was also checked to verify that the resulting image had actually been published.
 
 ![Docker Hub Confirmation](screenshots/dockerHub-confirmation.png)
 
-This provided external validation that the pipeline successfully produced and published the expected container image.
-
----
-
-# Webhook Validation Summary
-
-The webhook integration was validated at multiple levels.
-
-### 1. GitHub Connectivity
-
-The GitHub webhook delivery successfully reached the Jenkins endpoint.
-
-### 2. Real Push Event
-
-A real repository change was committed and pushed:
-
-```text
-Testing webhook setup
-```
-
-### 3. Automatic Jenkins Trigger
-
-Jenkins started the job in response to the GitHub push without requiring **Build Now**.
-
-### 4. Latest Code Checkout
-
-Jenkins retrieved the updated repository revision.
-
-### 5. Execution Validation
-
-The updated pipeline contained:
-
-```text
-Testing the integration...
-```
-
-providing an identifiable marker that the new code was being executed.
-
-Together, these checks validated:
-
-```text
-Git Push
-   ↓
-GitHub
-   ↓
-Webhook
-   ↓
-Jenkins
-   ↓
-Updated Pipeline
-```
+These earlier milestones provided the foundation for the later webhook and versioning automation.
 
 ---
 
 # Selected Troubleshooting
 
-This project required troubleshooting across nearly every layer of the CI/CD workflow.
+This project involved significantly more troubleshooting than simply writing a Jenkinsfile.
 
-Rather than treating each error independently, I learned to use each failure to identify which part of the pipeline had successfully completed and which layer needed investigation next.
+Some of the major issues included:
 
-## Jenkins → Docker Permissions
+### Docker Socket Permissions
 
-Jenkins initially received:
-
-```text
-permission denied while trying to connect to the docker API
-```
-
-Docker itself was verified as healthy using:
-
-```bash
-systemctl status docker
-```
-
-The problem was isolated to Jenkins access to:
+Jenkins initially could not communicate with Docker through:
 
 ```text
 /var/run/docker.sock
 ```
 
-The Jenkins user's group access was corrected without rebuilding the existing Jenkins environment.
+The Jenkins user's Linux group permissions were corrected so the containerized Jenkins instance could access the host Docker daemon.
 
-## Jenkins Shared Library Structure
+### Incorrect Docker Hub Repository
 
-A reusable `Docker.groovy` class was initially placed within Maven's source structure.
-
-The correct Shared Library location was:
+An earlier training repository was still referenced in the pipeline, causing:
 
 ```text
-src/com/example/Docker.groovy
+push access denied
+insufficient_scope
 ```
 
-while the Java application belonged under:
+The image destination was changed to:
 
 ```text
-src/main/java/com/example/Application.java
+ejones904/demo-app
 ```
 
-This clarified the difference between Jenkins Shared Library classpaths and Maven source conventions.
+### Jenkinsfile Location
 
-## Maven Source Discovery
+Jenkins initially could not locate the pipeline definition because the Jenkinsfile was stored at:
 
-Maven reported:
+```text
+src/Jenkinsfile
+```
+
+The SCM Script Path was updated accordingly.
+
+### `master` vs `main`
+
+The Shared Library configuration initially attempted to retrieve:
+
+```text
+master
+```
+
+while the repository uses:
+
+```text
+main
+```
+
+Updating the branch configuration corrected the library checkout.
+
+### Shared Library Annotation
+
+The Shared Library required:
+
+```groovy
+@Library('jenkins-shared-library') _
+```
+
+and configuration as a trusted Global Pipeline Library.
+
+### Maven Project Structure
+
+Incorrect Java source placement resulted in:
 
 ```text
 No sources to compile
 ```
 
-Investigation revealed the Java source was located under:
+Correcting the project to the standard Maven structure resolved the problem.
+
+### Shared Library Classpath
+
+`Docker.groovy` was originally placed under the Maven source path rather than the Jenkins Shared Library source path.
+
+Moving it to:
 
 ```text
-src/src/main/java/
+src/com/example/Docker.groovy
 ```
 
-instead of:
+allowed Jenkins to resolve the class.
+
+### Docker Image Tagging
+
+At one point Jenkins attempted to push a Docker tag that had never been built.
+
+The build and push responsibilities were separated and the same dynamic image name was passed through both operations.
+
+### Missing Dockerfile
+
+A later build progressed far enough to reveal:
 
 ```text
-src/main/java/
+failed to read dockerfile: open Dockerfile: no such file or directory
 ```
 
-After correcting the source path, Maven successfully generated:
+Adding the Dockerfile at the repository root allowed the pipeline to progress.
+
+### Maven/Shell Variable Expansion
+
+Maven `${parsedVersion...}` expressions were initially interpreted by `/bin/sh`, producing:
 
 ```text
-target/classes/com/example/Application.class
+Bad substitution
 ```
 
-## Docker Build / Push Logic
+Correct shell quoting allowed Maven to receive the expressions literally.
 
-The Shared Library originally mixed Docker build, login, and push responsibilities.
+### Jenkins Detached HEAD
 
-These were separated into:
+The automated version push initially failed because Jenkins did not have a normal local `main` branch.
 
-```text
-buildDockerImage()
-dockerLogin()
-dockerPush()
-```
-
-This made the workflow easier to debug and reuse.
-
-## Docker Image Tagging
-
-An image was once pushed using a tag that had never actually been built, producing:
-
-```text
-tag does not exist
-```
-
-The final pipeline generates one image tag:
-
-```groovy
-def imageTag = "jma-${env.BUILD_NUMBER}"
-```
-
-and passes that exact value to both the build and push operations.
-
-## Missing Dockerfile
-
-Once Jenkins successfully reached the Docker build operation, Docker reported:
-
-```text
-Dockerfile: no such file or directory
-```
-
-A Dockerfile was added at the repository root, matching the build context used by:
+Changing:
 
 ```bash
-docker build -t <image> .
+git push origin main
 ```
 
-## GitHub Webhook Payload URL Warning
+to:
 
-During webhook creation, GitHub displayed:
+```bash
+git push origin HEAD:main
+```
+
+resolved the issue.
+
+### Recursive CI/CD Execution
+
+Allowing Jenkins to push to the same repository that triggers the pipeline introduced the possibility of an infinite webhook loop.
+
+SCM Skip and:
 
 ```text
-Invalid payload URL
+[ci skip]
 ```
 
-However, the webhook was still created.
+were implemented as the guardrail.
 
-Rather than assuming the integration had failed based only on the warning, I checked GitHub's webhook delivery history.
-
-The initial webhook delivery succeeded.
-
-This reinforced an important troubleshooting lesson:
-
-> Validate the actual behavior of an integration instead of relying only on a UI warning.
-
-The webhook delivery history provided direct evidence that GitHub successfully contacted the Jenkins endpoint.
-
-A more detailed troubleshooting history is available in:
+More detailed troubleshooting and lessons learned are documented in:
 
 ```text
 TROUBLESHOOTING-AND-LESSONS-LEARNED.md
@@ -1025,317 +1025,259 @@ TROUBLESHOOTING-AND-LESSONS-LEARNED.md
 
 ---
 
+# An Important Lesson From the Build History
+
+One of the biggest lessons from this project was learning to treat changing errors as progress.
+
+During troubleshooting, errors moved through several layers:
+
+```text
+Docker Permission Error
+        ↓
+Repository Permission Error
+        ↓
+Jenkinsfile / Shared Library Issues
+        ↓
+Maven Structure Issues
+        ↓
+Docker Tag Issues
+        ↓
+Missing Dockerfile
+        ↓
+Maven/Shell Quoting
+        ↓
+Git Push / Detached HEAD
+        ↓
+CI Recursion
+        ↓
+Successful Automated Pipeline
+```
+
+A new error did not always mean the previous change failed.
+
+In many cases, it meant Jenkins had successfully moved farther through the pipeline and reached the next problem.
+
+That changed how I approached troubleshooting: solve the current failure, understand why it happened, and use the next error as information about how far the system progressed.
+
+---
+
 # Security Considerations
 
-Security practices demonstrated in this project include:
+Credentials are not hardcoded into the Jenkinsfile or Shared Library.
 
-- Jenkins-managed credentials
-- No Docker Hub passwords stored in source control
-- No GitHub credentials stored directly in pipeline code
-- Docker authentication using `--password-stdin`
-- Credential IDs referenced instead of secret values
-- Docker socket access controlled through Linux permissions
-- GitHub authentication managed through Jenkins
-- Separation of credentials from reusable Shared Library code
+Docker Hub authentication uses Jenkins Credentials.
 
-The current webhook implementation uses an HTTP endpoint for the lab environment.
+GitHub authentication for automated pushes also uses Jenkins Credentials and a GitHub Personal Access Token.
 
-For a production environment, improvements would include:
+The repository contains only the Jenkins credential IDs required to reference those secrets.
 
-- HTTPS/TLS for the Jenkins webhook endpoint
-- Scoped registry access tokens
-- Credential rotation
-- Dedicated Jenkins agents
-- More restrictive Docker daemon access
-- Containerized or ephemeral build agents
-- Centralized secrets management
-- Image vulnerability scanning
-- Least-privilege service accounts
-- Additional webhook security controls
+Sensitive values such as:
+
+* Docker Hub passwords/tokens
+* GitHub Personal Access Tokens
+* Jenkins credential values
+
+should never be committed to the repository or exposed in screenshots.
 
 ---
 
 # Key Achievements
 
-- Built a reusable Jenkins Shared Library using Groovy
-- Exposed reusable Jenkins pipeline steps through `vars/`
-- Created reusable implementation logic under the Shared Library `src/` classpath
-- Integrated Jenkins with GitHub SCM
-- Configured Jenkins Pipeline as Code
-- Built and packaged a Java/Spring Boot application using Maven 3.9
-- Generated a deployable JAR artifact
-- Integrated Docker builds into a containerized Jenkins environment
-- Configured Jenkins access to the host Docker daemon
-- Managed Docker Hub authentication through Jenkins Credentials
-- Automated Docker image publishing
-- Implemented Jenkins build-number-based Docker image versioning
-- Created traceability between Jenkins builds and Docker images
-- Configured GitHub push-event webhooks
-- Configured Jenkins automatic GitHub build triggers
-- Validated webhook connectivity through GitHub delivery history
-- Automatically triggered Jenkins from a Git push
-- Verified execution of the newly pushed repository revision
-- Diagnosed Linux/Docker socket permissions
-- Diagnosed Maven and Java source-path issues
-- Diagnosed Jenkins Shared Library classpath issues
-- Debugged Groovy syntax, method, variable-scope, and interpolation issues
-- Resolved GitHub/SSH and local WSL repository issues
-- Successfully completed the Shared Library pipeline with Build #25
-- Extended the project from manually triggered CI/CD to event-driven CI/CD
+This project now demonstrates the ability to:
 
----
-
-# What I Learned
-
-The biggest lesson from this project was not one specific Jenkins command.
-
-It was learning how to troubleshoot a CI/CD pipeline as a connected system.
-
-A Jenkins failure can originate from:
-
-```text
-Git
-GitHub
-HTTP Webhooks
-Groovy
-Jenkins configuration
-Shared Library structure
-Maven
-Java
-Linux permissions
-Docker
-Credentials
-Registry permissions
-Filesystem paths
-```
-
-The error displayed in Jenkins is often only the symptom of whichever layer the pipeline has reached.
-
-Instead of repeatedly changing configuration, I learned to verify each layer independently and use the latest error to narrow the search.
-
-The progression looked something like:
-
-```text
-Docker permission denied
-        ↓
-Fix Jenkins Docker access
-        ↓
-Docker tag does not exist
-        ↓
-Fix Shared Library build/push logic
-        ↓
-Dockerfile not found
-        ↓
-Add correct Docker build definition
-        ↓
-Pipeline continues farther
-        ↓
-Build #25 succeeds
-        ↓
-Add GitHub webhook
-        ↓
-Validate webhook delivery
-        ↓
-Push test change
-        ↓
-Jenkins automatically starts
-        ↓
-Updated code executes
-```
-
-Sometimes a new error is actually progress.
-
-It means the previous problem is no longer stopping the pipeline.
-
-I also learned that automation should be validated end-to-end.
-
-A successful webhook delivery proves connectivity.
-
-It does not by itself prove:
-
-```text
-Push → Trigger → Checkout → Execution
-```
-
-Following a real source-code change from Git commit through the GitHub webhook and into the automatically triggered Jenkins build provided stronger validation of the complete integration.
+* Build a reusable Jenkins Shared Library.
+* Create Jenkins Declarative Pipelines.
+* Automatically trigger Jenkins from GitHub pushes.
+* Build Java applications using Maven.
+* Automatically increment Maven application versions.
+* Read application versions programmatically from `pom.xml`.
+* Generate traceable Docker image tags.
+* Build Docker images from Jenkins.
+* Publish versioned images to Docker Hub.
+* Securely handle Docker Hub credentials.
+* Securely authenticate Jenkins to GitHub.
+* Create Git commits from a CI/CD pipeline.
+* Push automated source changes back to GitHub.
+* Troubleshoot Jenkins detached HEAD behavior.
+* Recognize and prevent recursive CI/CD execution.
+* Implement SCM Skip as a CI/CD guardrail.
+* Troubleshoot Groovy, shell, Maven, Git, Docker, and Jenkins integration issues.
 
 ---
 
 # Skills Demonstrated
 
-## Jenkins / CI/CD
-
-- Jenkins
-- Jenkins Declarative Pipelines
-- Jenkins Shared Libraries
-- Pipeline as Code
-- Reusable pipeline functions
-- Jenkins SCM integration
-- Jenkins build variables
-- Jenkins Credentials
-- Automatic build triggers
-- Event-driven CI/CD
-
-## GitHub / Source Control
-
-- Git
-- GitHub
-- GitHub Webhooks
-- Push-event automation
-- SSH authentication
-- Branch configuration
-- Repository troubleshooting
-- Git-based integration testing
-
-## Development / Automation
-
-- Groovy
-- Java
-- Spring Boot
-- Maven 3.9
-- Maven project structure
-- JAR packaging
-
-## Containers
-
-- Docker
-- Dockerfiles
-- Docker image builds
-- Docker image tagging
-- Docker Hub
-- Container registry authentication
-- Docker socket integration
-
-## Linux
-
-- Linux permissions
-- Users and groups
-- Unix sockets
-- Docker daemon troubleshooting
-- systemd
-- Filesystem troubleshooting
-- WSL
-
-## Integration / Troubleshooting
-
-- HTTP webhook endpoints
-- GitHub webhook delivery validation
-- Jenkins console-log analysis
-- CI/CD log analysis
-- Root-cause isolation
-- Jenkins execution context
-- Groovy debugging
-- Maven source discovery
-- Java package structure
-- Docker permissions
-- Docker build context
-- Registry authentication
-- End-to-end integration testing
+```text
+Jenkins
+Jenkins Declarative Pipelines
+Jenkins Shared Libraries
+Groovy
+Git
+GitHub
+GitHub Webhooks
+SCM
+SCM Skip
+CI/CD
+Pipeline as Code
+Maven
+Maven Build Helper Plugin
+Maven Versions Plugin
+Semantic Versioning
+Java
+Docker
+Docker Hub
+Jenkins Credentials
+GitHub Personal Access Tokens
+Automated Git Commits
+Automated Git Pushes
+Dynamic Docker Image Tagging
+Environment Variables
+Linux Permissions
+Shell Scripting
+Credential Management
+CI Recursion Prevention
+Troubleshooting
+Build Traceability
+```
 
 ---
 
-# Project Evidence
+# Project Evolution
 
-## Jenkins Shared Library Build #25 — Success
-
-![Jenkins Build 25 Success](screenshots/build%2025%20success.png)
-
-Successful execution of the underlying Jenkins Shared Library CI/CD pipeline.
-
-## Docker Hub Confirmation
-
-![Docker Hub Confirmation](screenshots/dockerHub-confirmation.png)
-
-External confirmation that the Jenkins-generated Docker image was successfully published to Docker Hub.
-
-## GitHub Webhook Delivery
-
-![GitHub Webhook Success](screenshots/github-webhook-success.png)
-
-Confirms that GitHub successfully delivered the webhook event to the Jenkins endpoint.
-
-## Automatically Triggered Jenkins Build
-
-![Webhook Triggered Jenkins Build](screenshots/webhook-triggered-jenkins-build.png)
-
-The Jenkins Console Output identifies the GitHub push as the build trigger, confirming that the job started automatically rather than through **Build Now**.
-
-Together, these screenshots demonstrate the progression:
+This project was intentionally built in stages.
 
 ```text
-Working Pipeline
-       ↓
-Published Docker Image
-       ↓
-GitHub Webhook
-       ↓
-Automatic Jenkins Trigger
+Jenkins Pipeline
+      ↓
+Reusable Shared Library
+      ↓
+Maven Build Automation
+      ↓
+Docker Build Automation
+      ↓
+Secure Registry Authentication
+      ↓
+Docker Hub Publishing
+      ↓
+Dynamic Build Tags
+      ↓
+GitHub Webhook Automation
+      ↓
+Automatic Maven Versioning
+      ↓
+Version-Based Docker Tags
+      ↓
+Automated Git Commits
+      ↓
+Automated Git Pushes
+      ↓
+SCM Skip / Loop Prevention
 ```
+
+Each enhancement removed another manual step or addressed a problem introduced by greater automation.
+
+---
+
+# What I Learned
+
+The biggest takeaway from this project was that CI/CD is much more than getting a successful build.
+
+As I continued automating the workflow, each improvement created new engineering considerations.
+
+Automatically triggering Jenkins removed the need to manually start builds, but meant I needed to understand webhook behavior.
+
+Automatically incrementing the application version removed another manual step, but meant the new version needed to persist outside the Jenkins workspace.
+
+Allowing Jenkins to push the version back to GitHub solved that problem, but introduced the possibility of Jenkins triggering itself indefinitely.
+
+That led to implementing SCM Skip and `[ci skip]`.
+
+I also gained a much better understanding of how several tools interact across boundaries:
+
+```text
+GitHub
+   ↓
+Jenkins
+   ↓
+Groovy
+   ↓
+Shell
+   ↓
+Maven
+   ↓
+Java
+   ↓
+Docker
+   ↓
+Docker Hub
+   ↓
+Git
+   ↓
+GitHub
+```
+
+The most valuable part of the project was not simply reaching a successful build. It was understanding why each failure occurred, what component was responsible, and how changes in one part of the pipeline affected everything downstream.
 
 ---
 
 # Future Improvements
 
-Potential next steps include:
+Potential future improvements include:
 
-- Separate the Shared Library from the sample application repository
-- Consume the Shared Library from multiple independent Jenkins pipelines
-- Add automated unit-test reporting
-- Add Docker image vulnerability scanning
-- Add SonarQube or other static analysis
-- Add deployment stages
-- Deploy the image to Kubernetes
-- Add environment-specific deployment logic
-- Add approval gates
-- Add automated rollback logic
-- Use dedicated Jenkins agents
-- Use ephemeral container-based build agents
-- Add centralized secrets management
-- Secure Jenkins and webhook traffic with HTTPS/TLS
-
-The most important architectural improvement would be demonstrating the same Shared Library functions being consumed by multiple independent application pipelines.
+* Automated unit and integration testing stages.
+* Static code analysis.
+* Container vulnerability scanning.
+* Automated deployment to a cloud environment.
+* Environment-specific deployment stages.
+* Git tagging for formal application releases.
+* Release notes generated from source-control history.
+* Artifact retention policies.
+* Pipeline notifications.
+* Additional approval gates for production deployment.
+* Infrastructure as Code for the Jenkins environment.
+* Monitoring and observability for deployed applications.
 
 ---
 
 # Final Result
 
-The project evolved from a manually executed Jenkins pipeline into an automatically triggered CI/CD workflow.
+The final project progressed from a basic Jenkins pipeline into an event-driven CI/CD workflow with reusable pipeline components, secure credentials, automatic application versioning, dynamic Docker image tagging, automated source-control updates, and protection against recursive CI execution.
 
-```text
-Developer
-   ↓
-Git Commit
-   ↓
-Git Push
-   ↓
-GitHub
-   ↓
-GitHub Webhook
-   ↓
-Jenkins Automatically Triggered
-   ↓
-SCM Checkout
-   ↓
-Jenkins Shared Library
-   ↓
-Maven 3.9
-   ↓
-Java JAR
-   ↓
-Docker Build
-   ↓
-Versioned Image
-   ↓
-Jenkins Credentials
-   ↓
-Docker Hub
-   ↓
-SUCCESS
+A normal development workflow can now begin with:
+
+```bash
+git push
 ```
 
-The pipeline now responds automatically to source-code changes rather than depending on a manual Jenkins build.
+and automatically progress through:
 
-More importantly, I came away with a much better understanding of what is actually happening between each of those arrows — and how to troubleshoot those connections when they do not work as expected.
+```text
+GitHub Webhook
+      ↓
+Jenkins
+      ↓
+SCM Skip Check
+      ↓
+Maven Version Increment
+      ↓
+Java Build
+      ↓
+Dynamic Image Version
+      ↓
+Docker Build
+      ↓
+Docker Hub Push
+      ↓
+Git Version Commit
+      ↓
+GitHub Push
+      ↓
+Webhook
+      ↓
+SCM Skip
+```
+
+The project demonstrates not only how to automate a CI/CD pipeline, but also how to handle the operational problems that appear as more of the software delivery lifecycle becomes automated.
 
 ---
 
@@ -1344,3 +1286,6 @@ More importantly, I came away with a much better understanding of what is actual
 **Ethan Jones**
 
 Cloud & DevOps Portfolio
+
+GitHub: Ejones904
+
